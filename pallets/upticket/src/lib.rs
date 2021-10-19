@@ -20,14 +20,10 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 
-
 	pub type HappeningIndex = u128;
-	pub type EventPrice = u16;
-
-	pub type Ticket<AccountIdOf, HappeningIndex> = TicketInfo<AccountIdOf, HappeningIndex>;
+	pub type EventPrice = u32;
 	
 	type HappeningInfoOf = HappeningInfo<HappeningIndex,EventPrice>;
-
 
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[scale_info(skip_type_params(T))]
@@ -38,31 +34,29 @@ pub mod pallet {
 
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[scale_info(skip_type_params(T))]
-	pub struct TicketInfo<AccountIdOf, HappeningIndex> {
-		holder: AccountIdOf,
+	pub struct TicketInfo {
 		happeningid: HappeningIndex,
-		price: u16,
+		price: EventPrice,
 	}
-	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-
+	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/v3/runtime/storage
 	#[pallet::storage]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	#[pallet::getter(fn Happenings)]
+	#[pallet::getter(fn happenings)]
 	pub(super) type Happenings<T: Config> =
 		StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfoOf, ValueQuery>;
 	
 	#[pallet::storage]
+	#[pallet::getter(fn tickets)]
+	pub(super) type Tickets<T: Config> =
+		StorageMap<_, Blake2_128Concat, (HappeningIndex, AccountIdOf<T>), TicketInfo, ValueQuery>;
+	
+	#[pallet::storage]
 	#[pallet::getter(fn fund_count)]
-	/// The total number of funds that have so far been allocated.
+	/// The total number of events that have been created
 	pub(super) type HappeningCount<T: Config> = StorageValue<_, HappeningIndex, ValueQuery>;
 
 	// Pallets use events to inform users when important changes are made.
@@ -72,8 +66,10 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Event emitted when a proof has been claimed. [who, claim]
 		ClaimCreated(T::AccountId, Vec<u8>),
-		EventCreated(HappeningIndex, EventPrice),
-		EventResult(Vec<u128>),
+		EventCreated(HappeningInfo<HappeningIndex, EventPrice>),
+		EventResult(HappeningInfo<HappeningIndex, EventPrice>),
+		TicketBought(TicketInfo),
+		TicketResult(TicketInfo),
 		/// Event emitted when a claim is revoked by the owner. [who, claim]
 		ClaimRevoked(T::AccountId, Vec<u8>),
 	}
@@ -99,7 +95,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn create_event(
 			origin: OriginFor<T>,
-			price: u16,
+			price: u32,
 		) -> DispatchResult {
 			ensure_signed(origin)?;
 			let index = <HappeningCount<T>>::get();
@@ -109,15 +105,41 @@ pub mod pallet {
 				price,
 			});
 			log::info!("{:?}", price);
-			// Happening::<T>::insert(&sender,&event_name);
-			Self::deposit_event(Event::EventCreated(index, price));
+			
+			Self::deposit_event(Event::EventCreated(HappeningInfo {
+				id: index,
+				price,
+			}));
 			Ok(())
 		}
 		#[pallet::weight(0_000)]
-		pub fn get_event(origin: OriginFor<T>) -> DispatchResult {
+		pub fn get_event(origin: OriginFor<T>, index: u128) -> DispatchResult {
+			let hap = <Happenings<T>>::get(index);
+			Self::deposit_event(Event::EventResult(hap));
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn buy_ticket(
+			origin: OriginFor<T>,
+			event_index: u128
+			) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			// let hap = Happening::<T>::get(&sender);
-			// Self::deposit_event(Event::EventResult(hap));
+			let hap = <Happenings<T>>::get(event_index);
+			let tick = TicketInfo {
+				happeningid: hap.id,
+				price: hap.price,
+			};
+			<Tickets<T>>::insert((&hap.id, &sender), &tick);
+			Self::deposit_event(Event::TicketBought(tick));
+			Ok(())
+		}
+
+		#[pallet::weight(0_000)]
+		pub fn get_ticket(origin: OriginFor<T>, index: u128) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			let tick = <Tickets<T>>::get((index,&sender));
+			Self::deposit_event(Event::TicketResult(tick));
 			Ok(())
 		}
 	}
