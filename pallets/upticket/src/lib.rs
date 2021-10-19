@@ -21,7 +21,7 @@ pub mod pallet {
 	}
 
 
-	pub type HappeningIndex = u32;
+	pub type HappeningIndex = u128;
 	pub type EventPrice = u16;
 
 	pub type Ticket<AccountIdOf, HappeningIndex> = TicketInfo<AccountIdOf, HappeningIndex>;
@@ -60,6 +60,11 @@ pub mod pallet {
 	pub(super) type Happenings<T: Config> =
 		StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfoOf, ValueQuery>;
 	
+	#[pallet::storage]
+	#[pallet::getter(fn fund_count)]
+	/// The total number of funds that have so far been allocated.
+	pub(super) type HappeningCount<T: Config> = StorageValue<_, HappeningIndex, ValueQuery>;
+
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events
 	#[pallet::event]
@@ -67,8 +72,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Event emitted when a proof has been claimed. [who, claim]
 		ClaimCreated(T::AccountId, Vec<u8>),
-		EventCreated(T::AccountId, Vec<u8>),
-		EventResult(Vec<u8>),
+		EventCreated(HappeningIndex, EventPrice),
+		EventResult(Vec<u128>),
 		/// Event emitted when a claim is revoked by the owner. [who, claim]
 		ClaimRevoked(T::AccountId, Vec<u8>),
 	}
@@ -94,14 +99,18 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn create_event(
 			origin: OriginFor<T>,
-			event_name: Vec<u8>,
-			price: u8,
+			price: u16,
 		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
-			// let current_events = Happening::<T>::get(&sender);
+			ensure_signed(origin)?;
+			let index = <HappeningCount<T>>::get();
+			<HappeningCount<T>>::put(index + 1);
+			<Happenings<T>>::insert(index, HappeningInfo {
+				id: index,
+				price,
+			});
 			log::info!("{:?}", price);
 			// Happening::<T>::insert(&sender,&event_name);
-			Self::deposit_event(Event::EventCreated(sender, event_name));
+			Self::deposit_event(Event::EventCreated(index, price));
 			Ok(())
 		}
 		#[pallet::weight(0_000)]
