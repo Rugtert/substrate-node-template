@@ -18,24 +18,25 @@ pub mod pallet {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
-
+	
 	pub type HappeningIndex = u32;
+	
+	pub type Ticket<AccountIdOf,HappeningIndex> = TicketInfo<AccountIdOf,HappeningIndex>;
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default)]
+	pub struct HappeningInfo<HappeningIndex> {
+		id: HappeningIndex,
+		price: u16
+	}
+
+
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default)]
+	pub struct TicketInfo<AccountIdOf,HappeningIndex> {
+		holder: AccountIdOf,
+		happeningid: HappeningIndex,
+		price: u16
+	}
+	
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-	type HappeningInfoOf<T> =
-	HappeningInfo<AccountIdOf<T>>;
-
-	pub struct HappeningInfo<AccountId> {
-		host: AccountId,
-		price: u8,
-		eventname: Vec<u8>,
-	}
-
-	#[derive(Encode, Decode, Default, PartialEq, Eq)]
-	#[cfg_attr(feature = "std", derive(Debug))]
-	pub struct Ticket<AccountId> {
-		holder: AccountId,
-		happeningid: u32,
-	}
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events
@@ -70,15 +71,12 @@ pub mod pallet {
 	#[pallet::storage]
 	// Learn more about declaring storage items:
 	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	pub(super) type Happening<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Vec<u8>, ValueQuery>;
+	pub(super) type Happening<T: Config> = StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfo<HappeningIndex>, ValueQuery>;
 	
-	#[pallet::storage]
-	pub(super) type TicketStore<T: Config> = StorageDoubleMap<_, Blake2_128Concat, T::AccountId,Blake2_128Concat, Vec<u8>,Vec<u8>,ValueQuery>;
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
 
-	// These functions materialize as "extrinsics", which are often compared to transactions.
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
