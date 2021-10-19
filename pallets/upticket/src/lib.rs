@@ -7,37 +7,59 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
-	use sp_std::vec::Vec;
 	use sp_std::str;
-	use super::*;
+	use sp_std::vec::Vec;
+	use scale_info::TypeInfo;
 	// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
-	
+
+
 	pub type HappeningIndex = u32;
+	pub type EventPrice = u16;
+
+	pub type Ticket<AccountIdOf, HappeningIndex> = TicketInfo<AccountIdOf, HappeningIndex>;
 	
-	pub type Ticket<AccountIdOf,HappeningIndex> = TicketInfo<AccountIdOf,HappeningIndex>;
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default)]
-	pub struct HappeningInfo<HappeningIndex> {
+	type HappeningInfoOf = HappeningInfo<HappeningIndex,EventPrice>;
+
+
+	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
+	#[scale_info(skip_type_params(T))]
+	pub struct HappeningInfo<HappeningIndex, EventPrice> {
 		id: HappeningIndex,
-		price: u16
+		price: EventPrice,
 	}
 
-
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default)]
-	pub struct TicketInfo<AccountIdOf,HappeningIndex> {
+	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
+	#[scale_info(skip_type_params(T))]
+	pub struct TicketInfo<AccountIdOf, HappeningIndex> {
 		holder: AccountIdOf,
 		happeningid: HappeningIndex,
-		price: u16
+		price: u16,
 	}
-	
 	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
+
+
+	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
+	pub struct Pallet<T>(_);
+
+	// The pallet's runtime storage items.
+	// https://docs.substrate.io/v3/runtime/storage
+	#[pallet::storage]
+	// Learn more about declaring storage items:
+	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
+	#[pallet::getter(fn Happenings)]
+	pub(super) type Happenings<T: Config> =
+		StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfoOf, ValueQuery>;
+	
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events
 	#[pallet::event]
@@ -62,17 +84,6 @@ pub mod pallet {
 		NotProofOwner,
 	}
 
-	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
-	pub struct Pallet<T>(_);
-
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/v3/runtime/storage
-	#[pallet::storage]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	pub(super) type Happening<T: Config> = StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfo<HappeningIndex>, ValueQuery>;
-	
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -81,21 +92,24 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000)]
-		pub fn create_event(origin: OriginFor<T>, event_name: Vec<u8>, price: u8) -> DispatchResult {
+		pub fn create_event(
+			origin: OriginFor<T>,
+			event_name: Vec<u8>,
+			price: u8,
+		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			let current_events = Happening::<T>::get(&sender);
+			// let current_events = Happening::<T>::get(&sender);
 			log::info!("{:?}", price);
-			Happening::<T>::insert(&sender,&event_name);
+			// Happening::<T>::insert(&sender,&event_name);
 			Self::deposit_event(Event::EventCreated(sender, event_name));
 			Ok(())
 		}
-		
 		#[pallet::weight(0_000)]
 		pub fn get_event(origin: OriginFor<T>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			let hap = Happening::<T>::get(&sender);
-			Self::deposit_event(Event::EventResult(hap));
-			Ok(())		
+			// let hap = Happening::<T>::get(&sender);
+			// Self::deposit_event(Event::EventResult(hap));
+			Ok(())
 		}
 	}
 }
