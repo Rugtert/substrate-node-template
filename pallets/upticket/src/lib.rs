@@ -1,22 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	// use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 	use scale_info::TypeInfo;
 	use sp_std::str;
 	use sp_std::vec::Vec;
-	// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 
@@ -26,6 +20,7 @@ pub mod pallet {
 	pub type BackendUserId = Vec<u128>;
 
 	type HappeningInfoOf = HappeningInfo<HappeningIndex, EventPrice>;
+	
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[scale_info(skip_type_params(T))]
 	pub struct HappeningInfo<HappeningIndex, EventPrice> {
@@ -39,7 +34,6 @@ pub mod pallet {
 		happeningid: HappeningIndex,
 		price: EventPrice,
 		is_paid: bool,
-		// sellable: bool,
 		max_resell_price: EventPrice,
 	}
 
@@ -58,6 +52,7 @@ pub mod pallet {
 	#[pallet::getter(fn happenings)]
 	pub(super) type Happenings<T: Config> =
 		StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfoOf, ValueQuery>;
+	
 	#[pallet::storage]
 	#[pallet::getter(fn tickets)]
 	pub(super) type Tickets<T: Config> = StorageMap<
@@ -73,11 +68,6 @@ pub mod pallet {
 	pub(super) type Accounts<T: Config> =
 		StorageMap<_, Blake2_128Concat, (T::AccountId, Vec<u8>), AccountInfo, ValueQuery>;
 
-	#[pallet::storage]
-	#[pallet::getter(fn fund_count)]
-	/// The total number of events that have been created
-	pub(super) type HappeningCount<T: Config> = StorageValue<_, HappeningIndex, ValueQuery>;
-
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -88,7 +78,6 @@ pub mod pallet {
 		TicketValid(TicketInfo),
 	}
 
-	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
 		TicketNotPaid,
@@ -107,8 +96,6 @@ pub mod pallet {
 			event_index: HappeningIndex,
 		) -> DispatchResult {
 			ensure_signed(origin)?;
-			// let index = <HappeningCount<T>>::get();
-			// <HappeningCount<T>>::put(index + 1);
 
 			<Happenings<T>>::insert(event_index, HappeningInfo { id: event_index, price });
 			log::info!("{:?}", price);
