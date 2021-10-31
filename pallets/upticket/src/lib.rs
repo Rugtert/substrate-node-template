@@ -4,198 +4,243 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
 	use scale_info::TypeInfo;
-	use sp_std::str;
 	use sp_std::vec::Vec;
+
+	pub type EvenementId = u128;
+	pub type Prijs = u32;
+	pub type MaxPrijs = u32;
+	pub type Naam = Vec<u8>;
+	pub type KlantId = u128;
+	pub type AantalTickets = u128;
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 
-	pub type HappeningIndex = u128;
-	pub type EventPrice = u32;
-	
-	pub type BackendUserId = Vec<u128>;
-
-	type HappeningInfoOf = HappeningInfo<HappeningIndex, EventPrice>;
-	
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
 	#[scale_info(skip_type_params(T))]
-	pub struct HappeningInfo<HappeningIndex, EventPrice> {
-		id: HappeningIndex,
-		price: EventPrice,
+	pub struct Evenement<EvenementId, Naam, Prijs, MaxPrijs, AantalTickets> {
+		id: EvenementId,
+		naam: Naam,
+		prijs: Prijs,
+		max_prijs: MaxPrijs,
+		aantal_tickets: AantalTickets,
 	}
-
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
-	#[scale_info(skip_type_params(T))]
-	pub struct TicketInfo {
-		happeningid: HappeningIndex,
-		price: EventPrice,
-		is_paid: bool,
-		max_resell_price: EventPrice,
-	}
-
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
-	#[scale_info(skip_type_params(T))]
-	pub struct AccountInfo {
-		backend_userid: Vec<u8>,
-		organisation: Vec<u8>,
-	}
-
-	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
-	pub struct Pallet<T>(_);
 
 	#[pallet::storage]
-	#[pallet::getter(fn happenings)]
-	pub(super) type Happenings<T: Config> =
-		StorageMap<_, Blake2_128Concat, HappeningIndex, HappeningInfoOf, ValueQuery>;
-	
+	#[pallet::getter(fn evenementen)]
+	pub(super) type Evenementen<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		EvenementId,
+		Evenement<EvenementId, Naam, Prijs, MaxPrijs, AantalTickets>,
+		ValueQuery,
+	>;
+
+	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, Default)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Ticket<Bool> {
+		is_gescand: Bool,
+	}
+
 	#[pallet::storage]
 	#[pallet::getter(fn tickets)]
 	pub(super) type Tickets<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		(HappeningIndex, T::AccountId, BackendUserId),
-		TicketInfo,
+		(EvenementId, KlantId),
+		Ticket<bool>,
 		ValueQuery,
 	>;
 
-	#[pallet::storage]
-	#[pallet::getter(fn accounts)]
-	pub(super) type Accounts<T: Config> =
-		StorageMap<_, Blake2_128Concat, (T::AccountId, Vec<u8>), AccountInfo, ValueQuery>;
+	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
+	pub struct Pallet<T>(_);
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		EventCreated(HappeningInfo<HappeningIndex, EventPrice>),
-		EventResult(HappeningInfo<HappeningIndex, EventPrice>),
-		TicketBought(TicketInfo),
-		TicketResult(TicketInfo),
-		TicketValid(TicketInfo),
+		EvenementAangemaakt(Evenement<EvenementId, Naam, Prijs, MaxPrijs, AantalTickets>),
+		TicketAangemaakt(Ticket<bool>),
+		Evenement(Evenement<EvenementId, Naam, Prijs, MaxPrijs, AantalTickets>),
+		Ticket(Ticket<bool>),
+		Beschikbaarheid(u128),
 	}
 
 	#[pallet::error]
 	pub enum Error<T> {
-		TicketNotPaid,
-		ResellPriceTooHigh,
+		NoneValue,
+		StorageOverflow,
+		TicketNotFound,
+		EvenementNotFound,
+		MaxPriceExceeded,
+		NoTicketsAvailable,
+		TicketAlreadyScanned,
 	}
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(10_000)]
-		pub fn create_event(
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn create_evenement(
 			origin: OriginFor<T>,
-			price: EventPrice,
-			event_index: HappeningIndex,
+			prijs: Prijs,
+			max_prijs: MaxPrijs,
+			naam: Naam,
+			id: EvenementId,
+			aantal_tickets: AantalTickets,
 		) -> DispatchResult {
 			ensure_signed(origin)?;
 
-			<Happenings<T>>::insert(event_index, HappeningInfo { id: event_index, price });
-			log::info!("{:?}", price);
+			let evenement = Evenement { id, prijs, max_prijs, naam, aantal_tickets };
 
-			Self::deposit_event(Event::EventCreated(HappeningInfo { id: event_index, price }));
+			<Evenementen<T>>::insert(id, evenement.clone());
+
+			Self::deposit_event(Event::EvenementAangemaakt(evenement));
 			Ok(())
 		}
 
-		#[pallet::weight(0_000)]
-		pub fn get_event(_origin: OriginFor<T>, event_index: HappeningIndex) -> DispatchResult {
-			let hap = <Happenings<T>>::get(event_index);
-			Self::deposit_event(Event::EventResult(hap));
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn get_evenement(origin: OriginFor<T>, id: EvenementId) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			let evenement = <Evenementen<T>>::get(id);
+
+			if evenement.id == 0 {
+				Err(Error::<T>::EvenementNotFound)?
+			}
+
+			Self::deposit_event(Event::Evenement(evenement));
 			Ok(())
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn get_evenement_beschikbaarheid(origin: OriginFor<T>, id: EvenementId) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			let evenement = <Evenementen<T>>::get(id);
+			if evenement.id == 0 {
+				Err(Error::<T>::EvenementNotFound)?
+			}
+
+			let beschikbaarheid = Self::get_beschikbaarheid(id);
+
+			Self::deposit_event(Event::Beschikbaarheid(beschikbaarheid));
+			Ok(())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn buy_ticket(
 			origin: OriginFor<T>,
-			event_index: HappeningIndex,
-			user_id: BackendUserId,
+			evenement_id: EvenementId,
+			klant_id: KlantId,
+			is_gescand: bool,
 		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 
-			let hap = <Happenings<T>>::get(event_index);
-			let tick = TicketInfo { happeningid: hap.id, price: hap.price, is_paid: false, max_resell_price: calc_max_price(hap.price) };
-			<Tickets<T>>::insert((&hap.id, &sender, user_id), &tick);
-			Self::deposit_event(Event::TicketBought(tick));
-			Ok(())
-		}
+			let evenement = <Evenementen<T>>::get(evenement_id);
 
-		#[pallet::weight(10_000)]
-		pub fn set_ticket_paid_status(
-			origin: OriginFor<T>,
-			event_index: HappeningIndex,
-			user_id: BackendUserId,
-			is_paid: bool,
-		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
-			let hap = <Happenings<T>>::get(event_index);
-			let tick = TicketInfo { happeningid: hap.id, price: hap.price, is_paid, max_resell_price: calc_max_price(hap.price) };
-
-			<Tickets<T>>::insert((&hap.id, &sender, user_id), &tick);
-			Self::deposit_event(Event::TicketBought(tick));
-			Ok(())
-		}
-
-		#[pallet::weight(0_000)]
-		pub fn get_ticket(
-			origin: OriginFor<T>,
-			event_index: HappeningIndex,
-			user_id: BackendUserId,
-		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
-			let tick = <Tickets<T>>::get((event_index, &sender, user_id));
-			Self::deposit_event(Event::TicketResult(tick));
-			Ok(())
-		}
-
-		#[pallet::weight(0_000)]
-		pub fn check_ticket(
-			origin: OriginFor<T>,
-			event_index: HappeningIndex,
-			user_id: BackendUserId,
-		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
-			let tick = <Tickets<T>>::get((event_index, &sender, user_id));
-
-			if tick.is_paid == false {
-				Err(Error::<T>::TicketNotPaid)?
-			}
-			Self::deposit_event(Event::TicketValid(tick));
-			Ok(())
-		}
-
-		#[pallet::weight(0_000)]
-		pub fn user_sell_ticket(
-			origin: OriginFor<T>,
-			event_index: HappeningIndex,
-			seller_user_id: BackendUserId,
-			receiver_user_id: BackendUserId,
-			selling_price: u32
-		) -> DispatchResult {
-			let sender = ensure_signed(origin)?;
-			let tick = <Tickets<T>>::get((event_index, &sender, &seller_user_id));
-
-			if tick.is_paid == false {
-				Err(Error::<T>::TicketNotPaid)?
+			if evenement.id == 0 {
+				Err(Error::<T>::EvenementNotFound)?
 			}
 
-			if selling_price > tick.max_resell_price {
-				Err(Error::<T>::ResellPriceTooHigh)?
-			}
-			
-			<Tickets<T>>::swap((event_index, &sender, &seller_user_id),(event_index, &sender, &receiver_user_id));
+			let beschikbaarheid = Self::get_beschikbaarheid(evenement.id);
 
+			if beschikbaarheid < 1 {
+				Err(Error::<T>::NoTicketsAvailable)?
+			}
+
+			let ticket = Ticket { is_gescand };
+
+			<Tickets<T>>::insert((evenement_id, klant_id), ticket.clone());
+
+			Self::deposit_event(Event::TicketAangemaakt(ticket));
+			Ok(())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn scan_ticket(
+			origin: OriginFor<T>,
+			evenement_id: EvenementId,
+			klant_id: KlantId,
+		) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			if <Tickets<T>>::contains_key((evenement_id, klant_id)) == false {
+				Err(Error::<T>::TicketNotFound)?
+			}
+
+			let mut ticket = <Tickets<T>>::get((evenement_id, klant_id));
+
+			if ticket.is_gescand == true {
+				Err(Error::<T>::TicketAlreadyScanned)?
+			}
+
+			ticket.is_gescand = true;
+
+			<Tickets<T>>::insert((evenement_id, klant_id), &ticket);
+
+			Self::deposit_event(Event::Ticket(ticket));
+			Ok(())
+		}
+
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn sell_ticket(
+			origin: OriginFor<T>,
+			evenement_id: EvenementId,
+			klant_oud: KlantId,
+			klant_nieuw: KlantId,
+			prijs: Prijs,
+		) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			if <Evenementen<T>>::contains_key(evenement_id) == false {
+				Err(Error::<T>::EvenementNotFound)?
+			}
+
+			if <Tickets<T>>::contains_key((evenement_id, klant_oud)) == false {
+				Err(Error::<T>::TicketNotFound)?
+			}
+
+			let ticket = <Tickets<T>>::get((evenement_id, klant_oud));
+
+			if ticket.is_gescand == true {
+				Err(Error::<T>::TicketAlreadyScanned)?
+			}
+
+			let evenement = <Evenementen<T>>::get(evenement_id);
+
+			if evenement.max_prijs < prijs {
+				Err(Error::<T>::MaxPriceExceeded)?
+			}
+
+			<Tickets<T>>::swap(
+				(evenement_id, klant_oud), 
+				(evenement_id, klant_nieuw)
+			);
+
+			let ticket = <Tickets<T>>::get((evenement_id, klant_nieuw));
+			Self::deposit_event(Event::Ticket(ticket));
 			Ok(())
 		}
 	}
 
-	fn calc_max_price(price: EventPrice) -> u32 {
-		return price + ((((price * 100)/ 100) * 20) / 100);
+	impl<T: Config> Pallet<T> {
+		pub fn get_beschikbaarheid(id: EvenementId) -> u128 {
+			let evenement = <Evenementen<T>>::get(id);
+
+			let mut count = 0;
+			for ticket in <Tickets<T>>::iter_keys() {
+				if ticket.0 == evenement.id {
+					count += 1;
+				}
+			}
+
+			let result = evenement.aantal_tickets - count;
+			return result;
+		}
 	}
 }
